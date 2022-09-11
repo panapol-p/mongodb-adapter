@@ -101,6 +101,11 @@ func NewAdapterWithCollectionName(clientOption *options.ClientOptions, databaseN
 	return baseNewAdapter(clientOption, databaseName, collectionName, timeout...)
 }
 
+func NewAdapterWithMongoClient(client *mongo.Client, timeout ...interface{}) (persist.BatchAdapter, error) {
+	databaseName := defaultDatabaseName
+	return baseNewAdapterWithMongoClient(client, databaseName, defaultCollectionName, timeout...)
+}
+
 // baseNewAdapter is a base constructor for Adapter
 func baseNewAdapter(clientOption *options.ClientOptions, databaseName string, collectionName string, timeout ...interface{}) (persist.BatchAdapter, error) {
 	a := &adapter{
@@ -118,6 +123,31 @@ func baseNewAdapter(clientOption *options.ClientOptions, databaseName string, co
 
 	// Open the DB, create it if not existed.
 	err := a.open(databaseName, collectionName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Call the destructor when the object is released.
+	runtime.SetFinalizer(a, finalizer)
+
+	return a, nil
+}
+
+// baseNewAdapter is a base constructor for Adapter
+func baseNewAdapterWithMongoClient(client *mongo.Client, databaseName string, collectionName string, timeout ...interface{}) (persist.BatchAdapter, error) {
+	a := &adapter{}
+	a.filtered = false
+
+	if len(timeout) == 1 {
+		a.timeout = timeout[0].(time.Duration)
+	} else if len(timeout) > 1 {
+		return nil, errors.New("too many arguments")
+	} else {
+		a.timeout = defaultTimeout
+	}
+
+	// Open the DB, create it if not existed.
+	err := a.openByExistMongoClient(client, databaseName, collectionName)
 	if err != nil {
 		return nil, err
 	}
@@ -163,6 +193,33 @@ func (a *adapter) open(databaseName string, collectionName string) error {
 	}
 
 	if _, err = collection.Indexes().CreateOne(
+		context.Background(),
+		mongo.IndexModel{
+			Keys:    keysDoc,
+			Options: options.Index().SetUnique(true),
+		},
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (a *adapter) openByExistMongoClient(client *mongo.Client, databaseName string, collectionName string) error {
+	db := client.Database(databaseName)
+	collection := db.Collection(collectionName)
+
+	a.client = client
+	a.collection = collection
+
+	indexes := []string{"ptype", "v0", "v1", "v2", "v3", "v4", "v5"}
+	keysDoc := bsonx.Doc{}
+
+	for _, k := range indexes {
+		keysDoc = keysDoc.Append(k, bsonx.Int32(1))
+	}
+
+	if _, err := collection.Indexes().CreateOne(
 		context.Background(),
 		mongo.IndexModel{
 			Keys:    keysDoc,

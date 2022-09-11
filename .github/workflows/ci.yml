@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Run semantic-release
-        if: github.repository == 'casbin/mongodb-adapter' && github.event_name == 'push'
+        if: github.repository == 'panapol/mongodb-adapter' && github.event_name == 'push'
         run: |
           npm install --save-dev semantic-release@17.2.4
           npx semantic-release
