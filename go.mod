@@ -1,4 +1,4 @@
-module github.com/panapol-p/mongodb-adapter
+module github.com/panapol-p/mongodb-adapter/v3
 
 go 1.18
 
